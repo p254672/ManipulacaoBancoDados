@@ -1,0 +1,106 @@
+---
+title: "desafio01"
+output:
+  pdf_document: default
+  html_document: default
+date: "2025-09-24"
+---
+
+```{r setup, include=TRUE}
+# ------------------------------------------------------------
+# Benchmark de leitura do flights.csv (US DOT Flight Delays)
+# ------------------------------------------------------------
+
+# Caminho do ZIP baixado do Kaggle (ajuste se necessário)
+zip_path <- "flights.csv.zip"
+
+if (!file.exists(zip_path)) {
+  stop("Arquivo 'flights.csv.zip' não encontrado. Baixe do Kaggle e ajuste 'zip_path'.")
+}
+
+# 1) Descompactar para um arquivo temporário (fread não lê .zip direto)
+tmp_dir <- tempdir()
+unzipped_files <- unzip(zip_path, exdir = tmp_dir)
+# Se houver mais de um arquivo no zip, tentamos pegar o .csv principal
+csv_path <- unzipped_files[grepl("\\.csv$", unzipped_files, ignore.case = TRUE)][1]
+if (is.na(csv_path)) stop("Nenhum .csv encontrado dentro do zip.")
+
+message("CSV extraído para: ", csv_path)
+
+# 2) Pacotes usados
+suppressPackageStartupMessages({
+  if (!requireNamespace("readr", quietly = TRUE)) {
+    stop("Pacote 'readr' não instalado. Instale com install.packages('readr').")
+  }
+  if (!requireNamespace("data.table", quietly = TRUE)) {
+    stop("Pacote 'data.table' não instalado. Instale com install.packages('data.table').")
+  }
+})
+
+# 3) Função auxiliar para cronometrar de forma justa
+time_it <- function(expr) {
+  gc()                   # limpa um pouco a memória entre tentativas
+  invisible(NULL)
+  t <- system.time({
+    obj <- eval.parent(substitute(expr))
+    # opcionalmente verifica dimensões para garantir que leu algo
+    print(paste("Linhas x Colunas:", paste(dim(obj), collapse = " x ")))
+    rm(obj); invisible(gc())
+  })
+  unname(t["elapsed"])
+}
+
+# 4) Rodar múltiplas repetições e pegar a mediana (mais robusto)
+n <- 3  # aumente para 5 ou 7 se quiser
+run_many <- function(fun_call, label) {
+  times <- numeric(n)
+  for (i in seq_len(n)) {
+    message(sprintf("[%s] repetição %d/%d ...", label, i, n))
+    times[i] <- time_it(fun_call)
+  }
+  list(label = label, times = times, median = median(times))
+}
+
+# 5) Executar os três métodos
+res_base       <- run_many(read.csv(csv_path), 
+                           label = "base::read.csv")
+res_readr      <- run_many(readr::read_csv(csv_path, show_col_types = FALSE, progress = FALSE),
+                           label = "readr::read_csv")
+res_datatable  <- run_many(data.table::fread(csv_path, showProgress = FALSE),
+                           label = "data.table::fread")
+
+# 6) Mostrar resultados
+cat("\n=== Tempos (segundos) por repetição ===\n")
+print(sprintf("%s: %s", res_base$label,     paste(round(res_base$times, 3), collapse = ", ")))
+print(sprintf("%s: %s", res_readr$label,    paste(round(res_readr$times, 3), collapse = ", ")))
+print(sprintf("%s: %s", res_datatable$label,paste(round(res_datatable$times, 3), collapse = ", ")))
+
+cat("\n=== Medianas (segundos) ===\n")
+med <- c(`base::read.csv`      = res_base$median,
+         `readr::read_csv`     = res_readr$median,
+         `data.table::fread`   = res_datatable$median)
+print(round(med, 3))
+
+cat("\nMétodo mais rápido no seu computador:", names(med)[which.min(med)], "\n")
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
