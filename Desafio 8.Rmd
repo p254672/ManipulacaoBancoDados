@@ -1,0 +1,198 @@
+---
+title: "Desafio 8"
+output: pdf_document
+date: "2025-09-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(DBI)
+library(RSQLite)
+library(dplyr)
+library(dbplyr)
+library(tidyr)
+library(stringr)
+```
+
+
+```{r}
+# ------------------------------------------------------------
+# 1) Conectar ao banco
+#    (ajuste o caminho do arquivo se necessário)
+# ------------------------------------------------------------
+db_path <- "C:/Users/pepem/OneDrive/Documentos/database.sqlite3"
+conn <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+DBI::dbListTables(conn)
+
+```
+
+```{r}
+DBI::dbGetQuery(conn, "SELECT DISTINCT id, instructors.name FROM instructors
+        INNER JOIN teachings ON instructors.id = teachings.instructor_id
+        INNER JOIN sections ON teachings.section_uuid = sections.uuid
+        INNER JOIN subject_memberships ON sections.course_offering_uuid = subject_memberships.course_offering_uuid
+        INNER JOIN subjects ON subject_memberships.subject_code = subjects.code
+        WHERE subjects.abbreviation='STAT'")
+```
+
+```{r}
+DBI::dbGetQuery(conn, "
+WITH stat_sections AS (
+  SELECT s.uuid AS section_uuid, s.course_offering_uuid, s.number AS section_number
+  FROM sections s
+  JOIN subject_memberships sm ON s.course_offering_uuid = sm.course_offering_uuid
+  JOIN subjects subj ON sm.subject_code = subj.code
+  WHERE subj.abbreviation = 'STAT'
+),
+gpa_sections AS (
+  SELECT
+    g.course_offering_uuid,
+    g.section_number,
+    (4*a_count + 3.5*ab_count + 3*b_count + 2.5*bc_count + 2*c_count + 1*d_count + 0*f_count) AS numer,
+    (a_count + ab_count + b_count + bc_count + c_count + d_count + f_count) AS denom
+  FROM grade_distributions g
+  JOIN stat_sections ss 
+    ON g.course_offering_uuid = ss.course_offering_uuid
+   AND g.section_number       = ss.section_number
+  WHERE (a_count + ab_count + b_count + bc_count + c_count + d_count + f_count) > 0
+),
+prof_gpa AS (
+  SELECT t.instructor_id, i.name,
+         SUM(gs.numer) * 1.0 / SUM(gs.denom) AS gpa
+  FROM teachings t
+  JOIN stat_sections ss ON t.section_uuid = ss.section_uuid
+  JOIN gpa_sections gs  
+    ON gs.course_offering_uuid = ss.course_offering_uuid
+   AND gs.section_number       = ss.section_number
+  JOIN instructors i ON t.instructor_id = i.id
+  GROUP BY t.instructor_id, i.name
+)
+SELECT *
+FROM prof_gpa
+ORDER BY gpa ASC
+LIMIT 1;
+")
+
+
+
+```
+
+
+```{r}
+DBI::dbGetQuery(conn, "
+WITH stat_sections AS (
+  SELECT s.uuid AS section_uuid, s.course_offering_uuid, s.number AS section_number
+  FROM sections s
+  JOIN subject_memberships sm ON s.course_offering_uuid = sm.course_offering_uuid
+  JOIN subjects subj ON sm.subject_code = subj.code
+  WHERE subj.abbreviation = 'STAT'
+),
+gpa_sections AS (
+  SELECT
+    g.course_offering_uuid,
+    g.section_number,
+    (4*a_count + 3.5*ab_count + 3*b_count + 2.5*bc_count + 2*c_count + 1*d_count + 0*f_count) AS numer,
+    (a_count + ab_count + b_count + bc_count + c_count + d_count + f_count) AS denom
+  FROM grade_distributions g
+  JOIN stat_sections ss 
+    ON g.course_offering_uuid = ss.course_offering_uuid
+   AND g.section_number       = ss.section_number
+  WHERE (a_count + ab_count + b_count + bc_count + c_count + d_count + f_count) > 0
+),
+prof_gpa AS (
+  SELECT t.instructor_id, i.name,
+         SUM(gs.numer) * 1.0 / SUM(gs.denom) AS gpa
+  FROM teachings t
+  JOIN stat_sections ss ON t.section_uuid = ss.section_uuid
+  JOIN gpa_sections gs  
+    ON gs.course_offering_uuid = ss.course_offering_uuid
+   AND gs.section_number       = ss.section_number
+  JOIN instructors i ON t.instructor_id = i.id
+  GROUP BY t.instructor_id, i.name
+)
+SELECT *
+FROM prof_gpa
+ORDER BY gpa DESC
+LIMIT 1;
+")
+
+
+```
+
+
+```{r}
+DBI::dbGetQuery(conn, "
+WITH stat_offerings AS (
+  SELECT co.uuid AS course_offering_uuid, c.uuid AS course_uuid, c.number, c.name
+  FROM course_offerings co
+  JOIN courses c ON co.course_uuid = c.uuid
+  JOIN subject_memberships sm ON co.uuid = sm.course_offering_uuid
+  JOIN subjects subj ON sm.subject_code = subj.code
+  WHERE subj.abbreviation = 'STAT'
+),
+gpa_sections AS (
+  SELECT
+    g.course_offering_uuid,
+    (4*a_count + 3.5*ab_count + 3*b_count + 2.5*bc_count + 2*c_count + 1*d_count + 0*f_count) AS numer,
+    (a_count + ab_count + b_count + bc_count + c_count + d_count + f_count) AS denom
+  FROM grade_distributions g
+  WHERE (a_count + ab_count + b_count + bc_count + c_count + d_count + f_count) > 0
+),
+course_gpa AS (
+  SELECT so.course_uuid, so.number, so.name,
+         SUM(gs.numer) * 1.0 / SUM(gs.denom) AS gpa
+  FROM stat_offerings so
+  JOIN gpa_sections gs ON so.course_offering_uuid = gs.course_offering_uuid
+  GROUP BY so.course_uuid, so.number, so.name
+)
+SELECT *
+FROM course_gpa
+ORDER BY gpa ASC
+LIMIT 1;
+")
+
+
+```
+
+```{r}
+DBI::dbGetQuery(conn, "
+WITH stat_offerings AS (
+  SELECT co.uuid AS course_offering_uuid, c.uuid AS course_uuid, c.number, c.name
+  FROM course_offerings co
+  JOIN courses c ON co.course_uuid = c.uuid
+  JOIN subject_memberships sm ON co.uuid = sm.course_offering_uuid
+  JOIN subjects subj ON sm.subject_code = subj.code
+  WHERE subj.abbreviation = 'STAT'
+),
+gpa_sections AS (
+  SELECT
+    g.course_offering_uuid,
+    (4*a_count + 3.5*ab_count + 3*b_count + 2.5*bc_count + 2*c_count + 1*d_count + 0*f_count) AS numer,
+    (a_count + ab_count + b_count + bc_count + c_count + d_count + f_count) AS denom
+  FROM grade_distributions g
+  WHERE (a_count + ab_count + b_count + bc_count + c_count + d_count + f_count) > 0
+),
+course_gpa AS (
+  SELECT so.course_uuid, so.number, so.name,
+         SUM(gs.numer) * 1.0 / SUM(gs.denom) AS gpa
+  FROM stat_offerings so
+  JOIN gpa_sections gs ON so.course_offering_uuid = gs.course_offering_uuid
+  GROUP BY so.course_uuid, so.number, so.name
+)
+SELECT *
+FROM course_gpa
+ORDER BY gpa DESC
+LIMIT 1;
+")
+
+```
+```{r}
+DBI::dbDisconnect(conn)
+
+```
+
