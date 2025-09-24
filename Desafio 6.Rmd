@@ -1,0 +1,124 @@
+---
+title: "Lab_Disco"
+output: pdf_document
+date: "2025-09-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+
+# Carregar pacotes
+library(DBI)
+library(RSQLite)
+
+# Conectar ao banco (mesmo .db que você usava no Colab)
+conn <- dbConnect(RSQLite::SQLite(), "disco.db")
+
+#Q3 - Liste as tabelas
+dbListTables(conn)
+
+#Q4 - Mostre as colunas da tabela Customers
+dbListFields(conn, "customers")
+
+#Q5 Quantos clientes estão atualmente cadastrados neste banco de dados.
+dbGetQuery(conn, "SELECT COUNT(DISTINCT CustomerId) AS n FROM customers")
+
+#Q6 Identifique o número de países diferentes em que moram os clientes encontrados acima.
+dbGetQuery(conn, "SELECT COUNT(DISTINCT Country) FROM customers")
+
+#Q7 Quantos clientes existem por país? 
+dbGetQuery(conn, "SELECT Country, COUNT(CustomerId) AS n
+                  FROM customers
+                  GROUP BY Country
+                  ORDER BY n DESC")
+
+# Q8 Quais são os 5 países com mais clientes registrados?
+dbGetQuery(conn, "SELECT Country, COUNT(CustomerId) AS n
+                  FROM customers
+                  GROUP BY Country
+                  ORDER BY n DESC
+                  LIMIT 5")
+
+#Q9 Quais são os países registrados que possuem apenas 6 letras no nome?
+dbGetQuery(conn, "SELECT DISTINCT Country FROM Customers
+                  WHERE LENGTH(COUNTRY) = 6")
+
+#Q10 Quais foram as músicas compradas por clientes brasileiros?
+dbGetQuery(conn, "SELECT DISTINCT tracks.Name FROM tracks
+                  INNER JOIN invoice_items
+                  ON tracks.trackid = invoice_items.trackid
+                  INNER JOIN invoices
+                  ON invoice_items.invoiceid = invoices.invoiceid
+                  INNER JOIN customers
+                  ON invoices.customerid = customers.customerid
+                  WHERE Country = 'Brazil'")
+
+# QBonus 1: Qual o álbum mais tocado por país?
+dbGetQuery(conn, "
+  WITH AlbumPlays AS (
+    SELECT c.Country,
+           a.Title AS Album,
+           COUNT(ii.Quantity) AS TotalPlays
+    FROM customers c
+    JOIN invoices i      ON c.CustomerId = i.CustomerId
+    JOIN invoice_items ii ON i.InvoiceId = ii.InvoiceId
+    JOIN tracks t        ON ii.TrackId = t.TrackId
+    JOIN albums a        ON t.AlbumId = a.AlbumId
+    GROUP BY c.Country, a.AlbumId
+  ),
+  Ranked AS (
+    SELECT Country, Album, TotalPlays,
+           RANK() OVER (PARTITION BY Country ORDER BY TotalPlays DESC) AS rk
+    FROM AlbumPlays
+  )
+  SELECT Country, Album, TotalPlays
+  FROM Ranked
+  WHERE rk = 1
+  ORDER BY Country;
+")
+
+# QBonus 2: Qual o artista mais tocado por país?
+dbGetQuery(conn, "
+  WITH ArtistPlays AS (
+    SELECT c.Country,
+           ar.Name AS Artist,
+           COUNT(ii.Quantity) AS TotalPlays
+    FROM customers c
+    JOIN invoices i      ON c.CustomerId = i.CustomerId
+    JOIN invoice_items ii ON i.InvoiceId = ii.InvoiceId
+    JOIN tracks t        ON ii.TrackId = t.TrackId
+    JOIN albums a        ON t.AlbumId = a.AlbumId
+    JOIN artists ar      ON a.ArtistId = ar.ArtistId
+    GROUP BY c.Country, ar.ArtistId
+  ),
+  Ranked AS (
+    SELECT Country, Artist, TotalPlays,
+           RANK() OVER (PARTITION BY Country ORDER BY TotalPlays DESC) AS rk
+    FROM ArtistPlays
+  )
+  SELECT Country, Artist, TotalPlays
+  FROM Ranked
+  WHERE rk = 1
+  ORDER BY Country;
+")
+
+#Q11 Desconecte do banco de dados.
+dbDisconnect(conn)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

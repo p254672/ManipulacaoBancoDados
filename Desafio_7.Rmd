@@ -1,0 +1,231 @@
+---
+title: "Desafio 7"
+output:
+  pdf_document: default
+  html_document: default
+date: "2025-09-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(RSQLite)
+library(tidyverse)
+
+
+db <- dbConnect(SQLite(),
+"//smb/ra254672/Downloads/discocopy.db")
+
+```
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+
+dbListTables(db)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+dbExecute(db,
+"CREATE TABLE instru
+(AlbumId INTEGER,
+TrackId INTEGER,
+ElectricGuitar INTEGER,
+Singer INTEGER,
+Trumpet INTEGER)", overwrite = TRUE)
+
+```
+
+
+```{r}
+"dbExecute(db,
+DROP TABLE i"
+
+```
+```{r}
+dbListTables(db)
+
+```
+```{r}
+aname = "Gilberto Gil"
+sql = paste0("SELECT ArtistId FROM artists "
+,
+"WHERE Name = '"
+, aname,
+"'")
+aId = dbGetQuery(db, sql)
+sql = paste('SELECT Title FROM albums'
+,
+'WHERE ArtistId ='
+, aId)
+dbGetQuery(db, sql)
+
+```
+```{r}
+sql = paste("SELECT ArtistId FROM artists"
+,
+"WHERE Name = ?")
+query <- dbSendQuery(db, sql)
+dbBind(query, list("Gilberto Gil"))
+aId <- dbFetch(query)
+dbClearResult(query)
+# Segundo passo interno, não deve causar problema
+sql = paste('SELECT Title FROM albums'
+,
+'WHERE ArtistId ='
+, aId)
+dbGetQuery(db, sql)
+
+
+```
+```{r}
+dbListFields(db,'instruments')
+
+```
+
+```{r}
+sql = paste('SELECT TrackId, Name FROM tracks'
+,
+'WHERE AlbumId = 85')
+dbGetQuery(db, sql) %>% head
+```
+
+
+```{r}
+dbExecute(db,
+"INSERT INTO instruments
+VALUES ('85'
+,
+'1075'
+, 0, 1, 0),
+('85'
+,
+'1078'
+, 0, 1, 0); ")
+
+```
+
+
+```{r}
+dbGetQuery(db,
+"SELECT * FROM instruments")
+
+```
+```{r}
+dbWriteTable(db,
+             "mtcars",
+             mtcars,
+             overwrite = TRUE)
+
+dbListTables(db)
+
+```
+
+
+```{r}
+dbGetQuery(db,
+"SELECT * FROM mtcars") %>% head(3)
+
+```
+
+
+```{r}
+theAvgCar <- mtcars %>%
+summarise_all(function(x) round(mean(x), 2))
+theAvgCar
+
+```
+
+
+```{r}
+dbWriteTable(db,
+"mtcars"
+, theAvgCar, append = TRUE)
+dbGetQuery(db,
+"SELECT * FROM mtcars") %>% tail(3)
+```
+
+
+```{r}
+dbWriteTable(db,
+"mtcars"
+, mtcars, overwrite = TRUE)
+dbGetQuery(db,
+"SELECT * FROM mtcars") %>% tail(3)
+
+```
+
+```{r}
+res <- dbSendQuery(db,
+"SELECT * FROM mtcars WHERE cyl = 4")
+while(!dbHasCompleted(res)){
+chunk <- dbFetch(res, n = 5)
+print(nrow(chunk))
+}
+
+```
+
+
+```{r}
+dbDisconnect(db)
+if("discoCopy.db" %in% list.files("//smb/ra254672/Downloads/discocopy.db")){
+file.remove("//smb/ra254672/Downloads/discocopy.db")
+}
+
+```
+
+
+```{r
+```
+
+
+
+```{r}
+library(RSQLite)
+library(tidyverse)
+library(dbplyr)
+db <- dbConnect(SQLite(),
+"//smb/ra254672/Downloads/discocopy.db") # original
+tracks <- tbl(db,
+"tracks") # dplyr
+tracks %>% head(3)
+
+```
+
+
+```{r}
+meanTracks <- tracks %>%
+group_by(AlbumId) %>%
+summarise(AvLen = mean(Milliseconds, na.rm = TRUE),
+AvCost = mean(UnitPrice, na.rm = TRUE))
+meanTracks
+
+```
+
+
+```{r}
+meanTracks %>% show_query()
+```
+
+
+```{r}
+mT <- meanTracks %>% collect()
+mT
+
+```
+```{r}
+dbDisconnect(db)
+```
+
