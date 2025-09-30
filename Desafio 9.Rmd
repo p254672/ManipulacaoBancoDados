@@ -1,0 +1,115 @@
+---
+title: "Desafio 9"
+output:
+  pdf_document: default
+  html_document: default
+date: "2025-09-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(DBI)
+library(RSQLite)
+library(readr)
+
+```
+
+```{r}
+con <- dbConnect(SQLite(), "voos.sqlite3")
+```
+
+```{r}
+airlines <- read_csv("airlines.csv")
+airports <- read_csv("airports.csv")
+
+dbWriteTable(con, "airlines", airlines, overwrite = TRUE)
+dbWriteTable(con, "airports", airports, overwrite = TRUE)
+```
+
+```{r}
+lerDados <- function(input, pos) {
+  message("Leitura atingiu a linha ", pos)
+
+  # Filtrar apenas voos dos aeroportos indicados
+  aeroportos <- c("BWI", "MIA", "SEA", "SFO", "JFK")
+  input_filtrado <- subset(
+    input,
+    ORIGIN_AIRPORT %in% aeroportos | DESTINATION_AIRPORT %in% aeroportos
+  )
+
+  # Gravar no banco (append para acumular chunks)
+  dbWriteTable(con, "flights", input_filtrado, append = TRUE)
+}
+
+# ---------------------------------------------------------------------
+# 4. Leitura do flights.csv em chunks
+# ---------------------------------------------------------------------
+# Callback para processar cada chunk
+callback <- SideEffectChunkCallback$new(lerDados)
+
+# Definir apenas as colunas de interesse
+colunas_usadas <- cols_only(
+  YEAR = col_integer(),
+  MONTH = col_integer(),
+  DAY = col_integer(),
+  AIRLINE = col_character(),
+  FLIGHT_NUMBER = col_integer(),
+  ORIGIN_AIRPORT = col_character(),
+  DESTINATION_AIRPORT = col_character(),
+  ARRIVAL_DELAY = col_double()
+)
+
+# Ler em chunks de 100 mil linhas
+read_csv_chunked(
+  "flights.csv",
+  callback = callback,
+  chunk_size = 100000,
+  col_types = colunas_usadas
+)
+```
+
+```{r}
+# ---------------------------------------------------------------------
+# 5. Consulta SQL: atraso médio por aeroporto de destino e companhia
+# ---------------------------------------------------------------------
+query <- "
+SELECT 
+  AIRLINE,
+  DESTINATION_AIRPORT,
+  AVG(ARRIVAL_DELAY) AS atraso_medio
+FROM flights
+WHERE ARRIVAL_DELAY IS NOT NULL
+GROUP BY AIRLINE, DESTINATION_AIRPORT
+"
+
+resultados <- dbGetQuery(con, query)
+```
+
+```{r}
+# Para cada companhia, pegar o maior atraso médio
+library(dplyr)
+resumo <- resultados %>%
+  group_by(AIRLINE) %>%
+  slice_max(order_by = atraso_medio, n = 1) %>%
+  arrange(desc(atraso_medio))
+
+print(resumo)
+```
+
+```{r}
+# 6. Data e hora da compilação
+# ---------------------------------------------------------------------
+cat("Arquivo compilado em:", format(Sys.time(), "%d/%m/%Y %H:%M:%S"), "\n")
+
+```
+
+```{r}
+# ---------------------------------------------------------------------
+# Encerrar conexão
+# ---------------------------------------------------------------------
+dbDisconnect(con)
+```
+
